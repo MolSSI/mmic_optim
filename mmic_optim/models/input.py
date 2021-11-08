@@ -4,21 +4,30 @@ from mmelemental.models import Molecule
 from mmelemental.models.forcefield import ForceField
 from pydantic import Field, validator
 from typing import Optional, Dict, List, Tuple, Union
+from mmelemental.util.units import LENGTH_DIM, MASS_DIM, TIME_DIM, SUBS_DIM
+
 
 __all__ = ["InputOptim"]
 
+
 class InputForces(ProtoModel):
 
-    method: str = Field(..., description="The algorithm used to compute the force. e.g. PME")
+    method: str = Field(
+        ..., description="The algorithm used to compute the force. e.g. PME"
+    )
 
     cutoff: Optional[float] = Field(None, description="The cut-off distance")
 
-    cutoff_units: Optional[str] = Field("angstrom", description="The unit of cutoff distance")
-
+    cutoff_units: Optional[str] = Field(
+        "angstrom", description="The unit of cutoff distance", dimensionality=LENGTH_DIM
+    )
 
 
 class InputTraj(ProtoModel):
-
+    selection: Optional[str] = Field(
+        None, description="Reference to which selections to store/write to file. Could be anything " 
+        "for now such as protein, all, etc.",
+    )
     geometry_freq: Optional[int] = Field(
         None, description="Every number of steps geometry are saved."
     )
@@ -28,8 +37,7 @@ class InputTraj(ProtoModel):
         dimensionality=LENGTH_DIM,
     )
     velocities_freq: Optional[int] = Field(
-        None,
-        description="Save velocities every 'velocities_freq' steps.",
+        None, description="Save velocities every 'velocities_freq' steps."
     )
     velocities_units: Optional[str] = Field(
         "angstrom/fs",
@@ -50,24 +58,16 @@ class InputTraj(ProtoModel):
     )
 
 
-
 class InputOptim(InputProc):
     """Basic input model for energy minimization."""
 
     # System fields
-    molecule: Dict[str, Molecule] = Field(
+    system: Dict[Molecule, ForceField] = Field(
         ...,
-        description="Molecular mechanics molecule object(s). See the :class:``Molecule`` class. "
-        "Example: mol = {'ligand': Molecule, 'receptor': Molecule, 'solvent': Molecule}.",
-    )
-    forcefield: Dict[str, ForceField] = Field(
-        ...,
-        description='Forcefield object(s) or name(s) for every Molecule defined in "mol".',
+        description="A mapping of Molecule to its corresponding ForceField object(s).",
     )
     boundary: Union[
-        Tuple[str, str],
-        Tuple[str, str, str, str],
-        Tuple[str, str, str, str, str, str],
+        Tuple[str, str], Tuple[str, str, str, str], Tuple[str, str, str, str, str, str]
     ] = Field(
         ...,
         description="Boundary conditions in all dimensions e.g. (periodic, periodic) imposes periodic boundaries in 1D.",
@@ -82,14 +82,12 @@ class InputOptim(InputProc):
         None,
         description="Cell dimensions in the form: ((xmin, ymin, ...), (xmax, ymax, ...))",
     )
-
     # I/O fields
     trajectory: Optional[Dict[str, InputTraj]] = Field(
         None,
         description="Trajectories to write for quantity 'key' every 'value' steps. E.g. {'geometry_freq': 10, 'velocities_freq': 100, 'forces_freq': 50} "
         "produces 3 trajectory objects storing positions every 10 steps, velocities, every 100 steps, and forces every 50 steps.",
     )
-
     # Global fields
     max_steps: int = Field(
         None, description="Max number of optimization steps to perform."
@@ -106,10 +104,8 @@ class InputOptim(InputProc):
 
     # Algorithmic fields
     method: str = Field(
-        None,
-        description="Optimization method to use e.g. conjugate_gradient.",
+        None, description="Optimization method to use e.g. conjugate_gradient."
     )
-
     # Geometric constraint fields
     bond_const: Optional[Dict[str, List[int]]] = Field(
         None,
@@ -122,7 +118,6 @@ class InputOptim(InputProc):
     bond_const_tol: Optional[float] = Field(
         None, description="Tolerance used for constraint self-consistency."
     )
-
     # Forces parameters
     short_forces: Optional[InputForces] = Field(
         None, description="Schema model for computing short-range forces."
@@ -133,17 +128,6 @@ class InputOptim(InputProc):
     )
 
     # Validators
-    @validator("forcefield")
-    def _valid_ff(cls, v, values):
-        for name in values.get("molecule"):
-            if name not in v:
-                raise ValueError(f"{name} does not have a defined force field.")
-        assert len(v) == len(values["molecule"]), (
-            "Every molecule should have a single force field definition. "
-            + f"{len(values['molecule'])} molecules defined using {len(v)} force fields."
-        )
-        return v
-
     @validator("cell")
     def _valid_cell(cls, v, values):
         assert len(v) == len(values.get("boundary"))
